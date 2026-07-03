@@ -1,4 +1,6 @@
 aiogram
 aiohttp
 yt-dlp
-
+openai-whisper
+ffmpeg-python
+pydub
