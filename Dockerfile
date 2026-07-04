@@ -1,26 +1,37 @@
-# استخدام نسخة Python 3.10 وهي الأكثر استقراراً مع whisper
+# استخدام صورة Python رسمية
 FROM python:3.10-slim
 
-# تثبيت المكتبات الأساسية
+# تعيين متغيرات البيئة
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    TZ=Africa/Algiers
+
+# تثبيت المتطلبات النظامية
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    gcc \
-    g++ \
-    curl \
-    python3-dev \
-    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+    git \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
 
-# إضافة rust للـ PATH
-ENV PATH="/root/.cargo/bin:${PATH}"
-
+# إنشاء مجلد العمل
 WORKDIR /app
 
-# تثبيت setuptools و pip أولاً لحل مشكلة pkg_resources
-RUN pip install --upgrade pip setuptools wheel
-
+# نسخ ملفات المتطلبات أولاً (للاستفادة من الكاش)
 COPY requirements.txt .
-RUN pip install -r requirements.txt
 
+# تثبيت المتطلبات Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# نسخ باقي الملفات
 COPY . .
 
+# إنشاء المجلدات المطلوبة
+RUN mkdir -p temp logs
+
+# تعيين متغيرات البيئة الافتراضية
+ENV BOT_TOKEN=${BOT_TOKEN} \
+    CHANNEL_ID=${CHANNEL_ID} \
+    ADMIN_ID=${ADMIN_ID}
+
+# تشغيل البوت
 CMD ["python", "bot.py"]
