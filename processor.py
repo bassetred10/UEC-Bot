@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import json
 import shutil
 
-import whisper
+from faster_whisper import WhisperModel
 import ffmpeg
 from pydub import AudioSegment
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     """
-    فئة معالجة الفيديو - محسنة لتوفير الذاكرة
+    فئة معالجة الفيديو - باستخدام faster-whisper (أخف وأسرع)
     """
     
     def __init__(self, cookies_file: str = None):
@@ -34,15 +34,19 @@ class VideoProcessor:
     
     def _load_model(self) -> None:
         """
-        تحميل نموذج Whisper (بإعدادات موفرة للذاكرة)
+        تحميل نموذج faster-whisper (موفر للذاكرة)
         """
         try:
-            logger.info(f"Loading Whisper model: {Config.WHISPER_MODEL} (tiny for memory saving)")
-            # 🔴 التعديل هنا: load_model بدون device
-            self.model = whisper.load_model(Config.WHISPER_MODEL)
-            logger.info("✅ Whisper model loaded successfully")
+            logger.info(f"Loading faster-whisper model: {Config.WHISPER_MODEL}")
+            # استخدام CPU مع int8 لتوفير الذاكرة
+            self.model = WhisperModel(
+                Config.WHISPER_MODEL,
+                device="cpu",
+                compute_type="int8"  # استخدام int8 لتوفير الذاكرة
+            )
+            logger.info("✅ faster-whisper model loaded successfully")
         except Exception as e:
-            logger.error(f"Error loading Whisper model: {e}")
+            logger.error(f"Error loading model: {e}")
             raise
     
     async def download_video(self, url: str) -> str:
@@ -105,18 +109,44 @@ class VideoProcessor:
     
     def extract_audio_text(self, audio_path: str) -> Dict[str, Any]:
         """
-        استخراج النص من الصوت مع التوقيت (محسن للذاكرة)
+        استخراج النص من الصوت مع التوقيت باستخدام faster-whisper
         """
         try:
             logger.info(f"Transcribing audio: {audio_path}")
-            # 🔴 التعديل هنا: transcribe بدون fp16
-            result = self.model.transcribe(
+            
+            # استخدام faster-whisper للتحويل
+            segments, info = self.model.transcribe(
                 audio_path,
-                language='ar',
-                task='transcribe'
+                language="ar",
+                task="transcribe",
+                beam_size=5,
+                best_of=5
             )
+            
+            # تحويل النتيجة إلى نفس تنسيق whisper القديم
+            result = {
+                'text': '',
+                'segments': [],
+                'duration': info.duration
+            }
+            
+            full_text = ""
+            for segment in segments:
+                segment_data = {
+                    'id': len(result['segments']),
+                    'start': segment.start,
+                    'end': segment.end,
+                    'text': segment.text,
+                    'no_speech_prob': 0.0
+                }
+                result['segments'].append(segment_data)
+                full_text += segment.text + " "
+            
+            result['text'] = full_text.strip()
+            
             logger.info(f"Transcription completed: {len(result['segments'])} segments")
             return result
+            
         except Exception as e:
             logger.error(f"Transcription error: {e}")
             raise Exception(f"فشل تحويل الصوت إلى نص: {e}")
@@ -220,7 +250,7 @@ class VideoProcessor:
     
     async def process_video(self, url: str, keywords: List[str]) -> Tuple[List[Dict], List[str]]:
         """
-        معالجة الفيديو بالكامل (محسن للذاكرة)
+        معالجة الفيديو بالكامل
         """
         audio_path = None
         temp_dirs = []
