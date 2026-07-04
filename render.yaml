@@ -1,13 +1,26 @@
 services:
-  - type: worker
+  - type: web
     name: islamic-podcast-bot
     env: docker
     dockerfilePath: ./Dockerfile
     repo: https://github.com/bassetred10/bot-podcast-islamic
-    plan: free
+    plan: paid  # 🔴 استخدام خطة مدفوعة أو استخدام Worker لمنع النوم
+    # أو استخدم: plan: starter  # 20$ شهرياً
+    
+    port: 8000
+    
+    # 🔴 إعدادات لمنع النوم
+    healthCheckPath: /health
+    healthCheckTimeout: 100
+    restartPolicy: always
+    
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./start.sh
+    
     envVars:
       - key: BOT_TOKEN
         sync: false
+        required: true
       - key: CHANNEL_ID
         value: -1004304853750
       - key: CHANNEL_USERNAME
@@ -16,5 +29,13 @@ services:
         value: 6046274404
       - key: COOKIES_FILE
         value: cookies.txt
-    buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: PORT
+        value: "8000"
+      - key: ENABLE_RATE_LIMIT
+        value: "true"
+      - key: MAX_REQUESTS_PER_MINUTE
+        value: "30"
+      - key: ENABLE_ANTI_SPAM
+        value: "true"
