@@ -20,29 +20,21 @@ class Config:
     # 🔒 إعدادات الأمان والحماية
     # ============================================
     
-    # معدل الطلبات (Rate Limiting)
     ENABLE_RATE_LIMIT = os.getenv('ENABLE_RATE_LIMIT', 'true').lower() == 'true'
     MAX_REQUESTS_PER_MINUTE = int(os.getenv('MAX_REQUESTS_PER_MINUTE', '30'))
-    RATE_LIMIT_WINDOW = 60  # ثانية
+    RATE_LIMIT_WINDOW = 60
     
-    # مكافحة البريد العشوائي (Anti-Spam)
     ENABLE_ANTI_SPAM = os.getenv('ENABLE_ANTI_SPAM', 'true').lower() == 'true'
-    MAX_SIMILAR_MESSAGES = 3  # عدد الرسائل المتشابهة المسموح بها
-    SPAM_WINDOW = 60  # ثانية
+    MAX_SIMILAR_MESSAGES = 3
+    SPAM_WINDOW = 60
     
-    # حماية الروابط
     ALLOWED_DOMAINS = [
         'youtube.com', 'youtu.be', 'www.youtube.com',
         'm.youtube.com', 'youtube-nocookie.com'
     ]
     
-    # الحد الأقصى لطول الرسالة
     MAX_MESSAGE_LENGTH = 5000
-    
-    # الحد الأقصى لعدد المقاطع لكل مستخدم في اليوم
     MAX_CLIPS_PER_USER_DAY = 20
-    
-    # القائمة السوداء للمستخدمين
     BLACKLISTED_USERS = []
     
     # ============================================
@@ -64,11 +56,10 @@ class Config:
         'صلاة', 'زكاة', 'صوم', 'حج', 'عبادة'
     ]
     
-    # 🔴 تم التعديل هنا: تقليل الاستهلاك
-    MAX_CLIPS = 3  # من 5 إلى 3
-    PADDING_TIME = 0.7  # من 1.0 إلى 0.7
+    MAX_CLIPS = 3
+    PADDING_TIME = 0.7
     MAX_PROCESSING_TIME = 300
-    WHISPER_MODEL = 'tiny'  # من base إلى tiny
+    WHISPER_MODEL = 'tiny'
     AUDIO_QUALITY = '0'
     
     # ============================================
@@ -80,16 +71,8 @@ class Config:
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
     LOG_FILE = 'logs/bot.log'
     
-    # ============================================
-    # إعدادات Keep-Alive (لمنع النوم)
-    # ============================================
-    
-    KEEP_ALIVE_INTERVAL = 300  # 5 دقائق
+    KEEP_ALIVE_INTERVAL = 300
     KEEP_ALIVE_URL = os.getenv('RENDER_EXTERNAL_URL', '')
-    
-    # ============================================
-    # رسائل البوت
-    # ============================================
     
     WELCOME_MESSAGE = (
         "👋 <b>مرحباً بك في بوت بودكاست</b>\n\n"
@@ -130,10 +113,8 @@ def validate_config() -> bool:
     print(f"   - CHANNEL_ID: {Config.CHANNEL_ID}")
     print(f"   - ADMIN_ID: {Config.ADMIN_ID}")
     print(f"   - KEYWORDS: {len(Config.KEYWORDS)} كلمة")
-    print(f"   - WHISPER_MODEL: {Config.WHISPER_MODEL} (موفر للذاكرة)")
-    print(f"   - MAX_CLIPS: {Config.MAX_CLIPS} (مقاطع لكل فيديو)")
-    print(f"   - Rate Limit: {'مفعل' if Config.ENABLE_RATE_LIMIT else 'معطل'}")
-    print(f"   - Anti-Spam: {'مفعل' if Config.ENABLE_ANTI_SPAM else 'معطل'}")
+    print(f"   - WHISPER_MODEL: {Config.WHISPER_MODEL}")
+    print(f"   - MAX_CLIPS: {Config.MAX_CLIPS}")
     print()
     return True
 
