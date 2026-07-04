@@ -2,19 +2,13 @@ FROM python:3.10-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    TZ=Africa/Algiers
+    TZ=Africa/Algeria
 
-# تثبيت المتطلبات النظامية مع إضافة libav
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     wget \
     curl \
-    libavcodec-dev \
-    libavformat-dev \
-    libavutil-dev \
-    libavfilter-dev \
-    libavdevice-dev \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
