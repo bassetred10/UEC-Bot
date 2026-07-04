@@ -16,7 +16,6 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.client.default import DefaultBotProperties
 from aiogram.exceptions import TelegramAPIError
 
-# استيراد الإعدادات والملفات الأخرى
 from config import Config, validate_config
 from database import db
 from processor import VideoProcessor, check_requirements
@@ -52,19 +51,16 @@ class ProcessState(StatesGroup):
 # تهيئة البوت والمعالجات
 # ============================================
 
-# التحقق من صحة الإعدادات
 if not validate_config():
     logger.error("Configuration validation failed")
     sys.exit(1)
 
-# التحقق من تثبيت المتطلبات
 try:
     if not check_requirements():
         logger.warning("Some requirements missing, but continuing...")
 except Exception as e:
     logger.warning(f"Requirements check failed: {e}")
 
-# تهيئة البوت
 try:
     bot = Bot(
         token=Config.BOT_TOKEN,
@@ -73,7 +69,6 @@ try:
     storage = MemoryStorage()
     dp = Dispatcher(storage=storage)
     
-    # تهيئة معالج الفيديو
     processor = VideoProcessor()
     
     logger.info("Bot initialized successfully")
@@ -102,7 +97,6 @@ def run_health_check():
 # ============================================
 
 async def check_subscription(user_id: int) -> bool:
-    """التحقق من اشتراك المستخدم في القناة"""
     try:
         member = await bot.get_chat_member(
             chat_id=Config.CHANNEL_ID,
@@ -114,7 +108,6 @@ async def check_subscription(user_id: int) -> bool:
         return False
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
-    """إنشاء لوحة المفاتيح الرئيسية"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="📊 الإحصائيات", callback_data="stats"),
@@ -130,7 +123,6 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
     ])
 
 def get_subscription_keyboard() -> InlineKeyboardMarkup:
-    """إنشاء لوحة مفاتيح الاشتراك"""
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -153,19 +145,12 @@ def get_subscription_keyboard() -> InlineKeyboardMarkup:
 
 @dp.message(CommandStart())
 async def start_command(message: Message, state: FSMContext) -> None:
-    """معالجة أمر /start مع التحقق الأمني"""
     user = message.from_user
     
-    # 🔒 التحقق من القائمة السوداء
     if security_manager.is_user_blacklisted(user.id):
-        await message.answer(
-            "⛔ <b>تم حظر حسابك</b>\n\n"
-            "لقد تم حظر حسابك بسبب انتهاك قواعد الاستخدام.\n"
-            "إذا كنت تعتقد أن هذا خطأ، يرجى التواصل مع الدعم."
-        )
+        await message.answer("⛔ <b>تم حظر حسابك</b>")
         return
     
-    # 🔒 التحقق من معدل الطلبات
     allowed, error_msg = security_manager.check_rate_limit(user.id)
     if not allowed:
         await message.answer(error_msg)
@@ -194,10 +179,8 @@ async def start_command(message: Message, state: FSMContext) -> None:
 
 @dp.message(Command("help"))
 async def help_command(message: Message) -> None:
-    """معالجة أمر /help"""
     user = message.from_user
     
-    # 🔒 التحقق الأمني
     if security_manager.is_user_blacklisted(user.id):
         await message.answer("⛔ تم حظر حسابك")
         return
@@ -221,8 +204,7 @@ async def help_command(message: Message) -> None:
         "🔒 <b>الأمان:</b>\n"
         "• نظام حماية من الهجمات\n"
         "• تحديد معدل الطلبات\n"
-        "• مكافحة البريد العشوائي\n"
-        "• قائمة سوداء للمخالفين\n\n"
+        "• مكافحة البريد العشوائي\n\n"
         "📢 <b>قناتنا:</b> @uec_u"
     )
     await message.answer(help_text, reply_markup=get_main_keyboard())
@@ -230,7 +212,6 @@ async def help_command(message: Message) -> None:
 
 @dp.message(Command("stats"))
 async def stats_command(message: Message) -> None:
-    """معالجة أمر /stats - للإدمن فقط"""
     user = message.from_user
     
     if user.id != Config.ADMIN_ID:
@@ -247,7 +228,10 @@ async def stats_command(message: Message) -> None:
         f"🔒 <b>حالة الأمان:</b>\n"
         f"• Rate Limit: {'مفعل' if Config.ENABLE_RATE_LIMIT else 'معطل'}\n"
         f"• Anti-Spam: {'مفعل' if Config.ENABLE_ANTI_SPAM else 'معطل'}\n"
-        f"• المستخدمين المحظورين: {len([u for u in security_manager.user_activities.values() if u.is_blacklisted])}"
+        f"• المستخدمين المحظورين: {len([u for u in security_manager.user_activities.values() if u.is_blacklisted])}\n\n"
+        f"⚙️ <b>الإعدادات:</b>\n"
+        f"• نموذج Whisper: {Config.WHISPER_MODEL}\n"
+        f"• الحد الأقصى للمقاطع: {Config.MAX_CLIPS}"
     )
     
     await message.answer(stats_text)
@@ -255,27 +239,22 @@ async def stats_command(message: Message) -> None:
 
 @dp.message(StateFilter(ProcessState.waiting_for_url))
 async def handle_url(message: Message, state: FSMContext) -> None:
-    """معالجة الروابط المرسلة مع التحقق الأمني"""
     user = message.from_user
     
-    # 🔒 التحقق من القائمة السوداء
     if security_manager.is_user_blacklisted(user.id):
         await message.answer("⛔ تم حظر حسابك")
         return
     
-    # 🔒 التحقق من معدل الطلبات
     allowed, error_msg = security_manager.check_rate_limit(user.id)
     if not allowed:
         await message.answer(error_msg)
         return
     
-    # 🔒 التحقق من البريد العشوائي
     allowed, error_msg = security_manager.check_anti_spam(user.id, message.text)
     if not allowed:
         await message.answer(error_msg)
         return
     
-    # 🔒 التحقق من الاشتراك
     if not await check_subscription(user.id):
         await message.answer(
             "⚠️ يرجى الاشتراك في قناتنا أولاً",
@@ -285,13 +264,11 @@ async def handle_url(message: Message, state: FSMContext) -> None:
     
     url = message.text.strip()
     
-    # 🔒 التحقق من أمان الرابط
     safe, error_msg = security_manager.check_url_safety(url)
     if not safe:
         await message.answer(error_msg)
         return
     
-    # 🔒 التحقق من حد المقاطع اليومي
     allowed, error_msg = security_manager.check_clip_limit(user.id)
     if not allowed:
         await message.answer(error_msg)
@@ -299,7 +276,7 @@ async def handle_url(message: Message, state: FSMContext) -> None:
     
     processing_msg = await message.answer(
         "🔄 <b>جاري تحميل وتحليل الفيديو...</b>\n"
-        "⏳ قد يستغرق هذا بعض الوقت (حتى 5 دقائق)\n\n"
+        "⏳ قد يستغرق هذا بعض الوقت (حتى 5 دقائق)\n"
         "🔒 <i>نظام الأمان نشط - يتم مراقبة جميع العمليات</i>"
     )
     
@@ -352,10 +329,7 @@ async def handle_url(message: Message, state: FSMContext) -> None:
                     end_time=segment['end']
                 )
                 db.increment_clips(user.id)
-                
-                # 🔒 تحديث عدد المقاطع للمستخدم
                 security_manager.increment_clip_count(user.id)
-                
                 processor.cleanup_clip(clip_path)
                 
             except Exception as e:
@@ -375,8 +349,7 @@ async def handle_url(message: Message, state: FSMContext) -> None:
             f"<code>{str(e)}</code>\n\n"
             "💡 نصائح:\n"
             "• تأكد من صحة الرابط\n"
-            "• حاول مرة أخرى بعد قليل\n\n"
-            "إذا استمر الخطأ، يرجى الاتصال بالدعم"
+            "• حاول مرة أخرى بعد قليل"
         )
 
 
@@ -386,10 +359,8 @@ async def handle_url(message: Message, state: FSMContext) -> None:
 
 @dp.callback_query()
 async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
-    """معالجة ضغطات الأزرار مع التحقق الأمني"""
     user = callback.from_user
     
-    # 🔒 التحقق الأمني
     if security_manager.is_user_blacklisted(user.id):
         await callback.answer("⛔ تم حظر حسابك", show_alert=True)
         return
@@ -438,8 +409,7 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
                 f"📅 <b>تاريخ الانضمام:</b> {user_stats['created_at'].strftime('%Y-%m-%d %H:%M')}\n"
                 f"📅 <b>آخر نشاط:</b> {user_stats['last_activity'].strftime('%Y-%m-%d %H:%M')}\n\n"
                 f"🔒 <b>حالة الأمان:</b>\n"
-                f"• محظور: {'نعم' if security_manager.is_user_blacklisted(user.id) else 'لا'}\n"
-                f"• المقاطع اليوم: {security_manager.user_activities.get(user.id, {}).clip_count_today if user.id in security_manager.user_activities else 0}/{Config.MAX_CLIPS_PER_USER_DAY}"
+                f"• محظور: {'نعم' if security_manager.is_user_blacklisted(user.id) else 'لا'}"
             )
             await callback.message.answer(profile_text)
         else:
@@ -472,20 +442,16 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
             "🔒 <b>معلومات الأمان</b>\n\n"
             "🛡️ <b>أنظمة الحماية المطبقة:</b>\n\n"
             "1️⃣ <b>معدل الطلبات</b>\n"
-            f"   • الحد الأقصى: {Config.MAX_REQUESTS_PER_MINUTE} طلب في الدقيقة\n"
-            "   • يمنع هجمات القوة العمياء\n\n"
+            f"   • الحد الأقصى: {Config.MAX_REQUESTS_PER_MINUTE} طلب في الدقيقة\n\n"
             "2️⃣ <b>مكافحة البريد العشوائي</b>\n"
-            f"   • الحد الأقصى: {Config.MAX_SIMILAR_MESSAGES} رسائل متشابهة\n"
-            "   • يمنع التكرار المفرط\n\n"
+            f"   • الحد الأقصى: {Config.MAX_SIMILAR_MESSAGES} رسائل متشابهة\n\n"
             "3️⃣ <b>حماية الروابط</b>\n"
-            "   • فقط روابط يوتيوب مسموحة\n"
-            "   • يمنع الروابط الضارة\n\n"
+            "   • فقط روابط يوتيوب مسموحة\n\n"
             "4️⃣ <b>الحد اليومي</b>\n"
-            f"   • {Config.MAX_CLIPS_PER_USER_DAY} مقطع في اليوم\n"
-            "   • يمنع الاستخدام المفرط\n\n"
-            "5️⃣ <b>القائمة السوداء</b>\n"
-            "   • حظر تلقائي للمخالفين\n"
-            "   • مراقبة مستمرة\n\n"
+            f"   • {Config.MAX_CLIPS_PER_USER_DAY} مقطع في اليوم\n\n"
+            "⚙️ <b>إعدادات الأداء:</b>\n"
+            f"• نموذج Whisper: {Config.WHISPER_MODEL} (موفر للذاكرة)\n"
+            f"• الحد الأقصى للمقاطع: {Config.MAX_CLIPS}\n\n"
             "✅ <i>جميع العمليات مراقبة ومسجلة</i>"
         )
         await callback.message.answer(security_text)
@@ -508,9 +474,6 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
 # ============================================
 
 async def main() -> None:
-    """
-    الدالة الرئيسية لتشغيل البوت
-    """
     logger.info("="*50)
     logger.info("🛡️ Starting Islamic Podcast Bot with Security")
     logger.info("="*50)
@@ -518,18 +481,14 @@ async def main() -> None:
     logger.info(f"Channel: {Config.CHANNEL_USERNAME}")
     logger.info(f"Admin ID: {Config.ADMIN_ID}")
     logger.info(f"Keywords: {len(Config.KEYWORDS)} words")
-    logger.info(f"Rate Limit: {'Enabled' if Config.ENABLE_RATE_LIMIT else 'Disabled'}")
-    logger.info(f"Anti-Spam: {'Enabled' if Config.ENABLE_ANTI_SPAM else 'Disabled'}")
+    logger.info(f"Whisper Model: {Config.WHISPER_MODEL} (Memory Optimized)")
+    logger.info(f"Max Clips: {Config.MAX_CLIPS}")
     logger.info("="*50)
     
-    # إنشاء المجلدات المطلوبة
     os.makedirs(Config.TEMP_DIR, exist_ok=True)
     os.makedirs('logs', exist_ok=True)
     
-    # تشغيل Health Check
     run_health_check()
-    
-    # 🔄 بدء Keep-Alive لمنع النوم
     await keep_alive_manager.start()
     
     try:
@@ -540,7 +499,6 @@ async def main() -> None:
         logger.error(f"Fatal error: {e}")
         raise
     finally:
-        # إيقاف Keep-Alive
         await keep_alive_manager.stop()
         await bot.session.close()
         logger.info("Bot session closed")
