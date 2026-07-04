@@ -4,19 +4,13 @@ services:
     env: docker
     dockerfilePath: ./Dockerfile
     repo: https://github.com/bassetred10/bot-podcast-islamic
-    plan: paid  # 🔴 استخدام خطة مدفوعة أو استخدام Worker لمنع النوم
-    # أو استخدم: plan: starter  # 20$ شهرياً
-    
+    plan: free
     port: 8000
-    
-    # 🔴 إعدادات لمنع النوم
     healthCheckPath: /health
     healthCheckTimeout: 100
     restartPolicy: always
-    
     buildCommand: pip install -r requirements.txt
     startCommand: ./start.sh
-    
     envVars:
       - key: BOT_TOKEN
         sync: false
