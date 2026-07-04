@@ -18,35 +18,33 @@ logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     """
-    فئة معالجة الفيديو
-    تقوم بتحميل الفيديو، تحويله إلى نص، واستخراج المقاطع بناءً على الكلمات المفتاحية
+    فئة معالجة الفيديو - محسنة لتوفير الذاكرة
     """
     
     def __init__(self, cookies_file: str = None):
         """
         تهيئة معالج الفيديو
-        
-        Args:
-            cookies_file: مسار ملف الكوكيز لتجاوز حظر يوتيوب
         """
         self.cookies_file = cookies_file if cookies_file else Config.COOKIES_FILE
         self.model = None
         self.temp_dir = Config.TEMP_DIR
         
-        # إنشاء مجلد الملفات المؤقتة
         os.makedirs(self.temp_dir, exist_ok=True)
-        
-        # تحميل نموذج Whisper
         self._load_model()
     
     def _load_model(self) -> None:
         """
-        تحميل نموذج Whisper لتحويل الصوت إلى نص
+        تحميل نموذج Whisper (بإعدادات موفرة للذاكرة)
         """
         try:
-            logger.info(f"Loading Whisper model: {Config.WHISPER_MODEL}")
-            self.model = whisper.load_model(Config.WHISPER_MODEL)
-            logger.info("Whisper model loaded successfully")
+            logger.info(f"Loading Whisper model: {Config.WHISPER_MODEL} (tiny for memory saving)")
+            # 🔴 استخدام tiny مع CPU فقط
+            self.model = whisper.load_model(
+                Config.WHISPER_MODEL,
+                device="cpu",
+                download_root=None
+            )
+            logger.info("✅ Whisper model loaded successfully (CPU mode)")
         except Exception as e:
             logger.error(f"Error loading Whisper model: {e}")
             raise
@@ -54,34 +52,22 @@ class VideoProcessor:
     async def download_video(self, url: str) -> str:
         """
         تحميل الفيديو من يوتيوب واستخراج الصوت
-        
-        Args:
-            url: رابط الفيديو
-        
-        Returns:
-            str: مسار ملف الصوت المستخرج
-        
-        Raises:
-            Exception: عند فشل التحميل
         """
-        # إنشاء مجلد مؤقت
         temp_dir = tempfile.mkdtemp(dir=self.temp_dir)
         output_path = os.path.join(temp_dir, 'video.mp4')
         
-        # بناء أمر yt-dlp
         cmd = [
             'yt-dlp',
-            '-f', 'bestaudio[ext=mp3]/bestaudio',  # أفضل جودة صوت
+            '-f', 'bestaudio[ext=mp3]/bestaudio',
             '-o', output_path.replace('.mp4', '.%(ext)s'),
             '--no-playlist',
             '--extract-audio',
             '--audio-format', 'mp3',
             '--audio-quality', Config.AUDIO_QUALITY,
-            '--quiet',  # تقليل الإخراج
+            '--quiet',
             '--no-warnings'
         ]
         
-        # إضافة ملف الكوكيز إذا كان موجوداً
         if self.cookies_file and os.path.exists(self.cookies_file):
             cmd.extend(['--cookies', self.cookies_file])
             logger.info("Using cookies file for YouTube")
@@ -91,7 +77,6 @@ class VideoProcessor:
         try:
             logger.info(f"Downloading video: {url}")
             
-            # تشغيل عملية التحميل
             process = await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=asyncio.subprocess.PIPE,
@@ -104,7 +89,6 @@ class VideoProcessor:
                 logger.error(f"yt-dlp failed: {error_msg}")
                 raise Exception(f"فشل تحميل الفيديو: {error_msg}")
             
-            # البحث عن ملف الصوت المستخرج
             audio_file = None
             for file in os.listdir(temp_dir):
                 if file.endswith('.mp3'):
@@ -119,31 +103,24 @@ class VideoProcessor:
             
         except Exception as e:
             logger.error(f"Download error: {e}")
-            # تنظيف الملفات المؤقتة في حالة الفشل
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
             raise
     
     def extract_audio_text(self, audio_path: str) -> Dict[str, Any]:
         """
-        استخراج النص من الصوت مع التوقيت
-        
-        Args:
-            audio_path: مسار ملف الصوت
-        
-        Returns:
-            Dict: نتائج التحويل (نص، مقاطع، توقيت)
-        
-        Raises:
-            Exception: عند فشل تحويل الصوت إلى نص
+        استخراج النص من الصوت مع التوقيت (محسن للذاكرة)
         """
         try:
             logger.info(f"Transcribing audio: {audio_path}")
+            # 🔴 استخدام إعدادات موفرة للذاكرة
             result = self.model.transcribe(
                 audio_path,
-                language='ar',  # اللغة العربية
+                language='ar',
                 task='transcribe',
-                fp16=False  # استخدام CPU
+                fp16=False,  # استخدام CPU
+                no_gravity=True,  # تقليل استخدام الذاكرة
+                condition_on_previous_text=False  # تسريع المعالجة
             )
             logger.info(f"Transcription completed: {len(result['segments'])} segments")
             return result
@@ -155,18 +132,11 @@ class VideoProcessor:
                      keywords: List[str]) -> List[Dict[str, Any]]:
         """
         البحث عن الكلمات المفتاحية في النص
-        
-        Args:
-            transcription: نتائج تحويل الصوت إلى نص
-            keywords: قائمة الكلمات المفتاحية للبحث
-        
-        Returns:
-            List[Dict]: قائمة المقاطع التي تحتوي على كلمات مفتاحية
         """
         found_segments = []
         segments = transcription.get('segments', [])
         duration = transcription.get('duration', 0)
-        padding = Config.PADDING_TIME
+        padding = Config.PADDING_TIME  # 🔴 0.7 ثانية بدلاً من 1.0
         
         logger.info(f"Searching for keywords in {len(segments)} segments")
         
@@ -175,19 +145,15 @@ class VideoProcessor:
             start = segment.get('start', 0)
             end = segment.get('end', 0)
             
-            # البحث عن الكلمات المفتاحية في النص
             matched_keywords = []
             for keyword in keywords:
                 if keyword.lower() in text.lower():
                     matched_keywords.append(keyword)
             
-            # إذا تم العثور على كلمات مفتاحية
             if matched_keywords:
-                # إضافة وقت إضافي قبل وبعد المقطع
                 new_start = max(0, start - padding)
                 new_end = min(duration, end + padding)
                 
-                # تمديد المقطع إذا كان في البداية أو النهاية
                 if start == 0:
                     new_start = 0
                 if end == duration:
@@ -203,12 +169,9 @@ class VideoProcessor:
                     'original_end': end
                 })
                 
-                logger.info(f"Found keyword '{matched_keywords[0]}' at {start:.2f}s - {end:.2f}s")
+                logger.info(f"Found keyword '{matched_keywords[0]}' at {start:.2f}s")
         
-        # ترتيب المقاطع حسب التوقيت
         found_segments.sort(key=lambda x: x['start'])
-        
-        # دمج المقاطع المتداخلة
         merged_segments = self._merge_segments(found_segments)
         
         logger.info(f"Found {len(merged_segments)} unique segments with keywords")
@@ -216,13 +179,7 @@ class VideoProcessor:
     
     def _merge_segments(self, segments: List[Dict]) -> List[Dict]:
         """
-        دمج المقاطع المتداخلة أو المتقاربة
-        
-        Args:
-            segments: قائمة المقاطع المرشحة
-        
-        Returns:
-            List[Dict]: قائمة المقاطع المدمجة
+        دمج المقاطع المتداخلة
         """
         if not segments:
             return []
@@ -231,13 +188,9 @@ class VideoProcessor:
         current = segments[0].copy()
         
         for next_seg in segments[1:]:
-            # إذا كان المقطع التالي متداخلاً أو قريباً جداً
-            if next_seg['start'] <= current['end'] + 2.0:  # 2 ثانية فارق
-                # دمج الكلمات المفتاحية
+            if next_seg['start'] <= current['end'] + 2.0:
                 current['keywords'] = list(set(current['keywords'] + next_seg['keywords']))
-                # دمج النص
                 current['text'] = current['text'] + " ... " + next_seg['text']
-                # تحديث وقت النهاية
                 current['end'] = max(current['end'], next_seg['end'])
                 current['duration'] = current['end'] - current['start']
             else:
@@ -250,30 +203,17 @@ class VideoProcessor:
     async def extract_clip(self, audio_path: str, start: float, end: float) -> str:
         """
         استخراج مقطع من الصوت
-        
-        Args:
-            audio_path: مسار ملف الصوت الأصلي
-            start: وقت البداية (بالثواني)
-            end: وقت النهاية (بالثواني)
-        
-        Returns:
-            str: مسار المقطع المستخرج
-        
-        Raises:
-            Exception: عند فشل استخراج المقطع
         """
         try:
-            # إنشاء مجلد مؤقت للمقطع
             temp_dir = tempfile.mkdtemp(dir=self.temp_dir)
             output_path = os.path.join(temp_dir, f'clip_{start:.2f}_{end:.2f}.mp3')
             
             logger.info(f"Extracting clip from {start:.2f}s to {end:.2f}s")
             
-            # استخدام ffmpeg لقص المقطع
             (
                 ffmpeg
                 .input(audio_path, ss=start, to=end)
-                .output(output_path, acodec='libmp3lame', ab='192k')
+                .output(output_path, acodec='libmp3lame', ab='128k')  # 🔴 جودة أقل لتوفير المساحة
                 .overwrite_output()
                 .run(quiet=True, capture_stdout=True, capture_stderr=True)
             )
@@ -287,38 +227,24 @@ class VideoProcessor:
     
     async def process_video(self, url: str, keywords: List[str]) -> Tuple[List[Dict], List[str]]:
         """
-        معالجة الفيديو بالكامل (تحميل، تحويل، بحث، استخراج)
-        
-        Args:
-            url: رابط الفيديو
-            keywords: قائمة الكلمات المفتاحية
-        
-        Returns:
-            Tuple[List[Dict], List[str]]: (قائمة المقاطع المكتشفة, قائمة مسارات المقاطع المستخرجة)
-        
-        Raises:
-            Exception: عند فشل أي خطوة في المعالجة
+        معالجة الفيديو بالكامل (محسن للذاكرة)
         """
         audio_path = None
         temp_dirs = []
         
         try:
-            # 1. تحميل الفيديو واستخراج الصوت
             logger.info(f"Starting video processing for: {url}")
             audio_path = await self.download_video(url)
             temp_dirs.append(os.path.dirname(audio_path))
             
-            # 2. تحويل الصوت إلى نص
             transcription = self.extract_audio_text(audio_path)
-            
-            # 3. البحث عن الكلمات المفتاحية
             segments = self.find_keywords(transcription, keywords)
             
             if not segments:
                 logger.info("No keywords found in the video")
                 return [], []
             
-            # 4. استخراج المقاطع (حد أقصى Config.MAX_CLIPS)
+            # 🔴 استخدام MAX_CLIPS محدث (3 مقاطع فقط)
             clips = []
             max_clips = min(len(segments), Config.MAX_CLIPS)
             
@@ -331,8 +257,6 @@ class VideoProcessor:
                 )
                 clips.append(clip_path)
                 temp_dirs.append(os.path.dirname(clip_path))
-                
-                # تحديث معلومات المقطع
                 segments[i]['clip_path'] = clip_path
             
             logger.info(f"Successfully processed video, extracted {len(clips)} clips")
@@ -340,20 +264,11 @@ class VideoProcessor:
             
         except Exception as e:
             logger.error(f"Processing error: {e}")
-            # تنظيف الملفات المؤقتة في حالة الفشل
             self._cleanup_temp_files(temp_dirs)
             raise
-        
-        # ملاحظة: لا نقوم بتنظيف الملفات هنا لأنها ستستخدم لإرسالها للمستخدم
-        # سيتم التنظيف بعد إرسال المقاطع
     
     def _cleanup_temp_files(self, temp_dirs: List[str]) -> None:
-        """
-        تنظيف الملفات والمجلدات المؤقتة
-        
-        Args:
-            temp_dirs: قائمة المجلدات المراد حذفها
-        """
+        """تنظيف الملفات المؤقتة"""
         for temp_dir in temp_dirs:
             try:
                 if os.path.exists(temp_dir):
@@ -363,19 +278,12 @@ class VideoProcessor:
                 logger.warning(f"Failed to clean up {temp_dir}: {e}")
     
     def cleanup_clip(self, clip_path: str) -> None:
-        """
-        تنظيف ملف مقطع بعد إرساله
-        
-        Args:
-            clip_path: مسار المقطع
-        """
+        """تنظيف ملف مقطع بعد إرساله"""
         try:
             if os.path.exists(clip_path):
-                # حذف الملف
                 os.remove(clip_path)
                 logger.info(f"Cleaned up clip file: {clip_path}")
                 
-                # حذف المجلد الأب إذا كان فارغاً
                 parent_dir = os.path.dirname(clip_path)
                 if os.path.exists(parent_dir) and not os.listdir(parent_dir):
                     os.rmdir(parent_dir)
@@ -384,14 +292,8 @@ class VideoProcessor:
             logger.warning(f"Failed to clean up clip {clip_path}: {e}")
 
 
-# التحقق من تثبيت المتطلبات
 def check_requirements() -> bool:
-    """
-    التحقق من تثبيت المتطلبات الأساسية
-    
-    Returns:
-        bool: هل جميع المتطلبات مثبتة
-    """
+    """التحقق من تثبيت المتطلبات الأساسية"""
     requirements = {
         'ffmpeg': 'ffmpeg -version',
         'yt-dlp': 'yt-dlp --version'
@@ -407,9 +309,6 @@ def check_requirements() -> bool:
     if missing:
         logger.error(f"Missing requirements: {', '.join(missing)}")
         print(f"\n❌ المتطلبات التالية غير مثبتة: {', '.join(missing)}")
-        print("يرجى تثبيتها باستخدام:")
-        print("sudo apt-get install ffmpeg")
-        print("pip install yt-dlp")
         return False
     
     return True
