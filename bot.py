@@ -2,6 +2,7 @@ import os
 import sys
 import logging
 import asyncio
+import threading  # 🔴 إضافة هذا الاستيراد
 from datetime import datetime
 from typing import Optional
 
@@ -20,6 +21,21 @@ from config import Config, validate_config
 from database import db
 from processor import VideoProcessor, check_requirements
 
+
+# ============================================
+# 🔴 دالة Health Check (توضع هنا بعد الاستيرادات)
+# ============================================
+def run_health_check():
+    """تشغيل خادم Health Check للتحقق من صحة البوت"""
+    try:
+        from health import run_health_server
+        threading.Thread(target=run_health_server, daemon=True).start()
+        print("✅ Health check server started")
+    except Exception as e:
+        print(f"⚠️  Health check server failed: {e}")
+# ============================================
+
+
 # ============================================
 # إعداد نظام التسجيل (Logging)
 # ============================================
@@ -37,12 +53,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+
 # ============================================
 # تعريف حالات FSM
 # ============================================
 
 class ProcessState(StatesGroup):
     waiting_for_url = State()
+
 
 # ============================================
 # تهيئة البوت والمعالجات
@@ -51,7 +69,6 @@ class ProcessState(StatesGroup):
 # التحقق من صحة الإعدادات
 if not validate_config():
     logger.error("Configuration validation failed")
-    # استمرار التشغيل حتى مع وجود أخطاء (لـ Render)
     logger.warning("Continuing despite validation errors...")
 
 # التحقق من تثبيت المتطلبات (تجاوز في Render)
@@ -78,6 +95,7 @@ try:
 except Exception as e:
     logger.error(f"Failed to initialize bot: {e}")
     sys.exit(1)
+
 
 # ============================================
 # دوال مساعدة
@@ -148,6 +166,7 @@ def get_keyword_keyboard() -> InlineKeyboardMarkup:
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
+
 # ============================================
 # معالجات الأوامر
 # ============================================
@@ -192,6 +211,7 @@ async def start_command(message: Message, state: FSMContext) -> None:
     
     await state.set_state(ProcessState.waiting_for_url)
 
+
 @dp.message(Command("help"))
 async def help_command(message: Message) -> None:
     help_text = (
@@ -210,6 +230,7 @@ async def help_command(message: Message) -> None:
     )
     await message.answer(help_text, reply_markup=get_main_keyboard())
 
+
 @dp.message(Command("stats"))
 async def stats_command(message: Message) -> None:
     if message.from_user.id != Config.ADMIN_ID:
@@ -226,6 +247,7 @@ async def stats_command(message: Message) -> None:
     )
     
     await message.answer(stats_text)
+
 
 @dp.message(StateFilter(ProcessState.waiting_for_url))
 async def handle_url(message: Message, state: FSMContext) -> None:
@@ -332,6 +354,7 @@ async def handle_url(message: Message, state: FSMContext) -> None:
             "إذا استمر الخطأ، يرجى الاتصال بالدعم"
         )
 
+
 # ============================================
 # معالجات الأزرار
 # ============================================
@@ -387,9 +410,9 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
     if data == "my_clips":
         clips = db.get_user_clips(user.id, limit=5)
         if clips:
+            import json
             clips_text = "📋 <b>آخر مقاطعك المستخرجة</b>\n\n"
             for i, clip in enumerate(clips, 1):
-                import json
                 keywords = json.loads(clip.keywords_found) if clip.keywords_found else []
                 clips_text += (
                     f"{i}. 🔑 {', '.join(keywords[:3])}\n"
@@ -422,11 +445,15 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
     
     await callback.answer("⚠️ إجراء غير معروف")
 
+
 # ============================================
-# تشغيل البوت
+# 🔴 الدالة الرئيسية main() مع استدعاء Health Check
 # ============================================
 
 async def main() -> None:
+    """
+    الدالة الرئيسية لتشغيل البوت
+    """
     logger.info("="*50)
     logger.info("Starting Islamic Podcast Bot on Render")
     logger.info("="*50)
@@ -436,8 +463,12 @@ async def main() -> None:
     logger.info(f"Keywords count: {len(Config.KEYWORDS)}")
     logger.info("="*50)
     
+    # إنشاء المجلدات المطلوبة
     os.makedirs(Config.TEMP_DIR, exist_ok=True)
     os.makedirs('logs', exist_ok=True)
+    
+    # 🔴 استدعاء Health Check هنا (قبل بدء البوت)
+    run_health_check()
     
     try:
         await dp.start_polling(bot)
@@ -449,6 +480,8 @@ async def main() -> None:
     finally:
         await bot.session.close()
         logger.info("Bot session closed")
+# ============================================
+
 
 if __name__ == "__main__":
     try:
