@@ -9,14 +9,12 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     curl \
-    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY requirements.txt .
-# تثبيت setuptools و wheel أولاً
-RUN pip install --no-cache-dir --upgrade pip setuptools wheel && \
+RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
 COPY . .
