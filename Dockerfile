@@ -1,37 +1,27 @@
-# استخدام صورة Python رسمية
 FROM python:3.10-slim
 
-# تعيين متغيرات البيئة
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     TZ=Africa/Algiers
 
-# تثبيت المتطلبات النظامية
 RUN apt-get update && apt-get install -y \
     ffmpeg \
     git \
     wget \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# إنشاء مجلد العمل
 WORKDIR /app
 
-# نسخ ملفات المتطلبات أولاً (للاستفادة من الكاش)
 COPY requirements.txt .
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
-# تثبيت المتطلبات Python
-RUN pip install --no-cache-dir -r requirements.txt
-
-# نسخ باقي الملفات
 COPY . .
 
-# إنشاء المجلدات المطلوبة
 RUN mkdir -p temp logs
+RUN chmod +x start.sh
 
-# تعيين متغيرات البيئة الافتراضية
-ENV BOT_TOKEN=${BOT_TOKEN} \
-    CHANNEL_ID=${CHANNEL_ID} \
-    ADMIN_ID=${ADMIN_ID}
+EXPOSE 8000
 
-# تشغيل البوت
-CMD ["python", "bot.py"]
+CMD ["./start.sh"]
