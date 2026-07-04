@@ -20,28 +20,29 @@ from config import Config, validate_config
 from database import db
 from processor import VideoProcessor, check_requirements
 
+# ============================================
 # إعداد نظام التسجيل (Logging)
+# ============================================
+
+# إنشاء مجلد السجلات
+os.makedirs('logs', exist_ok=True)
+
 logging.basicConfig(
-    level=getattr(logging, Config.LOG_LEVEL),
+    level=getattr(logging, Config.LOG_LEVEL if hasattr(Config, 'LOG_LEVEL') else 'INFO'),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler(Config.LOG_FILE, encoding='utf-8'),
+        logging.FileHandler('logs/bot.log', encoding='utf-8'),
         logging.StreamHandler(sys.stdout)
     ]
 )
 logger = logging.getLogger(__name__)
 
-
 # ============================================
-# تعريف حالات FSM (Finite State Machine)
+# تعريف حالات FSM
 # ============================================
 
 class ProcessState(StatesGroup):
-    """
-    حالات معالجة الفيديو
-    """
-    waiting_for_url = State()  # انتظار رابط الفيديو
-
+    waiting_for_url = State()
 
 # ============================================
 # تهيئة البوت والمعالجات
@@ -50,68 +51,51 @@ class ProcessState(StatesGroup):
 # التحقق من صحة الإعدادات
 if not validate_config():
     logger.error("Configuration validation failed")
-    sys.exit(1)
+    # استمرار التشغيل حتى مع وجود أخطاء (لـ Render)
+    logger.warning("Continuing despite validation errors...")
 
-# التحقق من تثبيت المتطلبات
-if not check_requirements():
-    logger.error("Requirements check failed")
-    sys.exit(1)
+# التحقق من تثبيت المتطلبات (تجاوز في Render)
+try:
+    if not check_requirements():
+        logger.warning("Some requirements missing, but continuing...")
+except Exception as e:
+    logger.warning(f"Requirements check failed: {e}")
 
 # تهيئة البوت
-bot = Bot(
-    token=Config.BOT_TOKEN,
-    default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-)
-
-# تهيئة التخزين المؤقت للحالات
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
-
-# تهيئة معالج الفيديو
-processor = VideoProcessor()
-
+try:
+    bot = Bot(
+        token=Config.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
+    )
+    storage = MemoryStorage()
+    dp = Dispatcher(storage=storage)
+    
+    # تهيئة معالج الفيديو
+    processor = VideoProcessor()
+    
+    logger.info("Bot initialized successfully")
+    
+except Exception as e:
+    logger.error(f"Failed to initialize bot: {e}")
+    sys.exit(1)
 
 # ============================================
 # دوال مساعدة
 # ============================================
 
 async def check_subscription(user_id: int) -> bool:
-    """
-    التحقق من اشتراك المستخدم في القناة الإجبارية
-    
-    Args:
-        user_id: معرف المستخدم
-    
-    Returns:
-        bool: هل المستخدم مشترك في القناة
-    """
     try:
         member = await bot.get_chat_member(
             chat_id=Config.CHANNEL_ID,
             user_id=user_id
         )
         is_subscribed = member.status in ['member', 'administrator', 'creator']
-        
-        if not is_subscribed:
-            logger.info(f"User {user_id} is not subscribed to channel")
-        
         return is_subscribed
-        
-    except TelegramAPIError as e:
-        logger.error(f"Telegram API error in check_subscription: {e}")
-        return False
     except Exception as e:
-        logger.error(f"Unexpected error in check_subscription: {e}")
+        logger.error(f"Subscription check error: {e}")
         return False
-
 
 def get_main_keyboard() -> InlineKeyboardMarkup:
-    """
-    إنشاء لوحة المفاتيح الرئيسية
-    
-    Returns:
-        InlineKeyboardMarkup: لوحة المفاتيح
-    """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="📊 الإحصائيات", callback_data="stats"),
@@ -123,14 +107,7 @@ def get_main_keyboard() -> InlineKeyboardMarkup:
         ]
     ])
 
-
 def get_subscription_keyboard() -> InlineKeyboardMarkup:
-    """
-    إنشاء لوحة مفاتيح الاشتراك الإجباري
-    
-    Returns:
-        InlineKeyboardMarkup: لوحة مفاتيح الاشتراك
-    """
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(
@@ -146,18 +123,10 @@ def get_subscription_keyboard() -> InlineKeyboardMarkup:
         ]
     ])
 
-
 def get_keyword_keyboard() -> InlineKeyboardMarkup:
-    """
-    إنشاء لوحة مفاتيح الكلمات المفتاحية
-    
-    Returns:
-        InlineKeyboardMarkup: لوحة مفاتيح الكلمات
-    """
     buttons = []
     row = []
     
-    # عرض أول 6 كلمات مفتاحية
     for i, keyword in enumerate(Config.KEYWORDS[:6]):
         row.append(InlineKeyboardButton(
             text=f"#{keyword}",
@@ -170,7 +139,6 @@ def get_keyword_keyboard() -> InlineKeyboardMarkup:
     if row:
         buttons.append(row)
     
-    # إضافة أزرار إضافية
     buttons.append([
         InlineKeyboardButton(
             text="🔄 تحديث الكلمات",
@@ -180,28 +148,16 @@ def get_keyword_keyboard() -> InlineKeyboardMarkup:
     
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-
 # ============================================
-# معالجات الأوامر (Command Handlers)
+# معالجات الأوامر
 # ============================================
 
 @dp.message(CommandStart())
 async def start_command(message: Message, state: FSMContext) -> None:
-    """
-    معالجة أمر /start
-    
-    تعرض رسالة ترحيب وتتحقق من اشتراك المستخدم
-    
-    Args:
-        message: رسالة الأمر
-        state: حالة FSM
-    """
     user = message.from_user
     
-    # تسجيل دخول المستخدم
     logger.info(f"User {user.id} (@{user.username}) started the bot")
     
-    # إضافة المستخدم إلى قاعدة البيانات
     db.add_user(
         user_id=user.id,
         username=user.username,
@@ -209,21 +165,24 @@ async def start_command(message: Message, state: FSMContext) -> None:
         last_name=user.last_name
     )
     
-    # التحقق من الاشتراك في القناة
     if not await check_subscription(user.id):
         await message.answer(
-            Config.SUBSCRIPTION_MESSAGE,
+            "👋 مرحبا بك في <b>بوت بودكاست</b>\n\n"
+            "للاستفادة من خدمات البوت، يرجى الاشتراك في قناتنا أولاً 📢",
             reply_markup=get_subscription_keyboard()
         )
         return
     
-    # عرض رسالة الترحيب
-    await message.answer(
-        Config.WELCOME_MESSAGE,
-        reply_markup=get_main_keyboard()
+    welcome_message = (
+        "👋 <b>مرحباً بك في بوت بودكاست</b>\n\n"
+        "🎙️ <i>تحويل فيديوهات البودكاست الدينية لتسهيل نشرها في مواقع التواصل الاجتماعي</i>\n\n"
+        "📤 أرسل رابط الفيديو الآن وسأقوم بقص أهم الفوائد "
+        "(دعاء، حديث، حكمة) لك!\n\n"
+        "🔍 الكلمات المفتاحية المدعومة:\n"
+        f"{', '.join(Config.KEYWORDS[:10])}..."
     )
     
-    # عرض الكلمات المفتاحية
+    await message.answer(welcome_message, reply_markup=get_main_keyboard())
     await message.answer(
         "🔑 <b>الكلمات المفتاحية المدعومة:</b>\n"
         f"{', '.join(Config.KEYWORDS[:15])}...\n\n"
@@ -231,20 +190,10 @@ async def start_command(message: Message, state: FSMContext) -> None:
         reply_markup=get_keyword_keyboard()
     )
     
-    # تعيين حالة انتظار الرابط
     await state.set_state(ProcessState.waiting_for_url)
-
 
 @dp.message(Command("help"))
 async def help_command(message: Message) -> None:
-    """
-    معالجة أمر /help
-    
-    تعرض رسالة مساعدة تحتوي على شرح البوت والأوامر المتاحة
-    
-    Args:
-        message: رسالة الأمر
-    """
     help_text = (
         "🤖 <b>مساعدة البوت</b>\n\n"
         "📌 <b>كيفية الاستخدام:</b>\n"
@@ -259,26 +208,14 @@ async def help_command(message: Message) -> None:
         "/stats - الإحصائيات (للإدمن فقط)\n\n"
         "📢 <b>قناتنا:</b> @uec_u"
     )
-    
     await message.answer(help_text, reply_markup=get_main_keyboard())
-
 
 @dp.message(Command("stats"))
 async def stats_command(message: Message) -> None:
-    """
-    معالجة أمر /stats
-    
-    تعرض إحصائيات البوت (للمدير فقط)
-    
-    Args:
-        message: رسالة الأمر
-    """
-    # التحقق من أن المستخدم هو المدير
     if message.from_user.id != Config.ADMIN_ID:
         await message.answer("⛔ هذا الأمر مخصص للإدمن فقط")
         return
     
-    # جلب الإحصائيات من قاعدة البيانات
     users_count, clips_count = db.get_stats()
     
     stats_text = (
@@ -290,21 +227,10 @@ async def stats_command(message: Message) -> None:
     
     await message.answer(stats_text)
 
-
 @dp.message(StateFilter(ProcessState.waiting_for_url))
 async def handle_url(message: Message, state: FSMContext) -> None:
-    """
-    معالجة الروابط المرسلة من المستخدمين
-    
-    تقوم بتحميل الفيديو، تحويله إلى نص، واستخراج المقاطع الدينية
-    
-    Args:
-        message: رسالة المستخدم
-        state: حالة FSM
-    """
     user = message.from_user
     
-    # التحقق من الاشتراك
     if not await check_subscription(user.id):
         await message.answer(
             "⚠️ يرجى الاشتراك في قناتنا أولاً",
@@ -312,10 +238,8 @@ async def handle_url(message: Message, state: FSMContext) -> None:
         )
         return
     
-    # الحصول على النص المرسل
     url = message.text.strip()
     
-    # التحقق من صحة الرابط
     if not (url.startswith('http://') or url.startswith('https://')):
         await message.answer(
             "❌ يرجى إرسال رابط صحيح للفيديو من يوتيوب\n\n"
@@ -323,7 +247,6 @@ async def handle_url(message: Message, state: FSMContext) -> None:
         )
         return
     
-    # إرسال رسالة المعالجة
     processing_msg = await message.answer(
         "🔄 <b>جاري تحميل وتحليل الفيديو...</b>\n"
         "⏳ قد يستغرق هذا بعض الوقت (حتى 5 دقائق)\n\n"
@@ -335,7 +258,6 @@ async def handle_url(message: Message, state: FSMContext) -> None:
     )
     
     try:
-        # معالجة الفيديو
         logger.info(f"Processing video for user {user.id}: {url}")
         segments, clips = await processor.process_video(url, Config.KEYWORDS)
         
@@ -349,18 +271,13 @@ async def handle_url(message: Message, state: FSMContext) -> None:
             )
             return
         
-        # تحديث رسالة المعالجة
         await processing_msg.edit_text(
             f"✅ <b>تم العثور على {len(segments)} مقطع ديني!</b>\n"
             f"🎥 <i>جاري تحميل المقاطع...</i>"
         )
         
-        # إرسال المقاطع المستخرجة
         for i, (segment, clip_path) in enumerate(zip(segments, clips), 1):
-            # الكلمات المفتاحية المكتشفة
             keywords_text = ', '.join(segment['keywords'])
-            
-            # نص المقطع (مختصر)
             text_preview = segment['text'][:200]
             if len(segment['text']) > 200:
                 text_preview += '...'
@@ -374,7 +291,6 @@ async def handle_url(message: Message, state: FSMContext) -> None:
             )
             
             try:
-                # إرسال المقطع الصوتي
                 with open(clip_path, 'rb') as audio_file:
                     await message.answer_audio(
                         audio_file,
@@ -383,7 +299,6 @@ async def handle_url(message: Message, state: FSMContext) -> None:
                         title=f"مقطع ديني {i}"
                     )
                 
-                # تسجيل المقطع في قاعدة البيانات
                 db.add_clip(
                     user_id=user.id,
                     video_url=url,
@@ -392,18 +307,13 @@ async def handle_url(message: Message, state: FSMContext) -> None:
                     start_time=segment['start'],
                     end_time=segment['end']
                 )
-                
-                # زيادة عدد المقاطع للمستخدم
                 db.increment_clips(user.id)
-                
-                # تنظيف الملف المؤقت
                 processor.cleanup_clip(clip_path)
                 
             except Exception as e:
                 logger.error(f"Failed to send clip {i}: {e}")
                 await message.answer(f"❌ فشل إرسال المقطع {i}: {e}")
         
-        # رسالة الانتهاء
         await processing_msg.edit_text(
             "✅ <b>تم الانتهاء من استخراج جميع المقاطع!</b>\n\n"
             "🔗 يمكنك مشاركة هذه المقاطع في مواقع التواصل الاجتماعي\n"
@@ -422,24 +332,15 @@ async def handle_url(message: Message, state: FSMContext) -> None:
             "إذا استمر الخطأ، يرجى الاتصال بالدعم"
         )
 
-
 # ============================================
-# معالجات الأزرار (Callback Query Handlers)
+# معالجات الأزرار
 # ============================================
 
 @dp.callback_query()
 async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
-    """
-    معالجة ضغطات الأزرار
-    
-    Args:
-        callback: بيانات الضغط على الزر
-        state: حالة FSM
-    """
     user = callback.from_user
     data = callback.data
     
-    # معالجة تحقق الاشتراك
     if data == "check_subscription":
         if await check_subscription(user.id):
             await callback.message.delete()
@@ -452,7 +353,6 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     
-    # معالجة عرض الإحصائيات
     if data == "stats":
         if user.id == Config.ADMIN_ID:
             await stats_command(callback.message)
@@ -461,13 +361,11 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     
-    # معالجة عرض المساعدة
     if data == "help":
         await help_command(callback.message)
         await callback.answer()
         return
     
-    # معالجة عرض الملف الشخصي
     if data == "profile":
         user_stats = db.get_user_stats(user.id)
         if user_stats:
@@ -486,12 +384,12 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     
-    # معالجة عرض مقاطع المستخدم
     if data == "my_clips":
         clips = db.get_user_clips(user.id, limit=5)
         if clips:
             clips_text = "📋 <b>آخر مقاطعك المستخرجة</b>\n\n"
             for i, clip in enumerate(clips, 1):
+                import json
                 keywords = json.loads(clip.keywords_found) if clip.keywords_found else []
                 clips_text += (
                     f"{i}. 🔑 {', '.join(keywords[:3])}\n"
@@ -506,7 +404,6 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
         await callback.answer()
         return
     
-    # معالجة اختيار كلمة مفتاحية
     if data.startswith("keyword_"):
         keyword = data.replace("keyword_", "")
         await callback.answer(
@@ -514,31 +411,24 @@ async def handle_callback(callback: CallbackQuery, state: FSMContext) -> None:
             "📤 أرسل رابط فيديو لبدء المعالجة",
             show_alert=True
         )
-        # تعيين حالة انتظار الرابط
         await state.set_state(ProcessState.waiting_for_url)
         return
     
-    # معالجة تحديث الكلمات المفتاحية
     if data == "refresh_keywords":
         keyboard = get_keyword_keyboard()
         await callback.message.edit_reply_markup(reply_markup=keyboard)
         await callback.answer("🔄 تم تحديث قائمة الكلمات المفتاحية")
         return
     
-    # أي ضغط آخر
     await callback.answer("⚠️ إجراء غير معروف")
-
 
 # ============================================
 # تشغيل البوت
 # ============================================
 
 async def main() -> None:
-    """
-    الدالة الرئيسية لتشغيل البوت
-    """
     logger.info("="*50)
-    logger.info("Starting Islamic Podcast Bot")
+    logger.info("Starting Islamic Podcast Bot on Render")
     logger.info("="*50)
     logger.info(f"Bot Token: {Config.BOT_TOKEN[:10]}...")
     logger.info(f"Channel: {Config.CHANNEL_USERNAME}")
@@ -546,11 +436,10 @@ async def main() -> None:
     logger.info(f"Keywords count: {len(Config.KEYWORDS)}")
     logger.info("="*50)
     
-    # إنشاء مجلد للملفات المؤقتة
     os.makedirs(Config.TEMP_DIR, exist_ok=True)
+    os.makedirs('logs', exist_ok=True)
     
     try:
-        # بدء البوت
         await dp.start_polling(bot)
     except KeyboardInterrupt:
         logger.info("Bot stopped by user")
@@ -560,7 +449,6 @@ async def main() -> None:
     finally:
         await bot.session.close()
         logger.info("Bot session closed")
-
 
 if __name__ == "__main__":
     try:
