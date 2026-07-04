@@ -59,7 +59,7 @@ class Config:
     MAX_CLIPS = 3
     PADDING_TIME = 0.7
     MAX_PROCESSING_TIME = 300
-    WHISPER_MODEL = 'tiny'
+    WHISPER_MODEL = 'tiny'  # tiny, base, small, medium, large
     AUDIO_QUALITY = '0'
     
     # ============================================
