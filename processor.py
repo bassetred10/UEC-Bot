@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import json
 import shutil
 
-from faster_whisper import WhisperModel
+import whisper
 import ffmpeg
 from pydub import AudioSegment
 
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class VideoProcessor:
     """
-    فئة معالجة الفيديو - باستخدام faster-whisper (أخف وأسرع)
+    فئة معالجة الفيديو
     """
     
     def __init__(self, cookies_file: str = None):
@@ -34,19 +34,14 @@ class VideoProcessor:
     
     def _load_model(self) -> None:
         """
-        تحميل نموذج faster-whisper (موفر للذاكرة)
+        تحميل نموذج Whisper
         """
         try:
-            logger.info(f"Loading faster-whisper model: {Config.WHISPER_MODEL}")
-            # استخدام CPU مع int8 لتوفير الذاكرة
-            self.model = WhisperModel(
-                Config.WHISPER_MODEL,
-                device="cpu",
-                compute_type="int8"  # استخدام int8 لتوفير الذاكرة
-            )
-            logger.info("✅ faster-whisper model loaded successfully")
+            logger.info(f"Loading Whisper model: {Config.WHISPER_MODEL}")
+            self.model = whisper.load_model(Config.WHISPER_MODEL)
+            logger.info("✅ Whisper model loaded successfully")
         except Exception as e:
-            logger.error(f"Error loading model: {e}")
+            logger.error(f"Error loading Whisper model: {e}")
             raise
     
     async def download_video(self, url: str) -> str:
@@ -109,44 +104,17 @@ class VideoProcessor:
     
     def extract_audio_text(self, audio_path: str) -> Dict[str, Any]:
         """
-        استخراج النص من الصوت مع التوقيت باستخدام faster-whisper
+        استخراج النص من الصوت مع التوقيت
         """
         try:
             logger.info(f"Transcribing audio: {audio_path}")
-            
-            # استخدام faster-whisper للتحويل
-            segments, info = self.model.transcribe(
+            result = self.model.transcribe(
                 audio_path,
-                language="ar",
-                task="transcribe",
-                beam_size=5,
-                best_of=5
+                language='ar',
+                task='transcribe'
             )
-            
-            # تحويل النتيجة إلى نفس تنسيق whisper القديم
-            result = {
-                'text': '',
-                'segments': [],
-                'duration': info.duration
-            }
-            
-            full_text = ""
-            for segment in segments:
-                segment_data = {
-                    'id': len(result['segments']),
-                    'start': segment.start,
-                    'end': segment.end,
-                    'text': segment.text,
-                    'no_speech_prob': 0.0
-                }
-                result['segments'].append(segment_data)
-                full_text += segment.text + " "
-            
-            result['text'] = full_text.strip()
-            
             logger.info(f"Transcription completed: {len(result['segments'])} segments")
             return result
-            
         except Exception as e:
             logger.error(f"Transcription error: {e}")
             raise Exception(f"فشل تحويل الصوت إلى نص: {e}")
