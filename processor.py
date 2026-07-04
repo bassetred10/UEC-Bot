@@ -7,6 +7,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import json
 import shutil
 
+# 🔴 تغيير الاستيراد
 import whisper
 import ffmpeg
 from pydub import AudioSegment
@@ -22,9 +23,6 @@ class VideoProcessor:
     """
     
     def __init__(self, cookies_file: str = None):
-        """
-        تهيئة معالج الفيديو
-        """
         self.cookies_file = cookies_file if cookies_file else Config.COOKIES_FILE
         self.model = None
         self.temp_dir = Config.TEMP_DIR
@@ -33,9 +31,7 @@ class VideoProcessor:
         self._load_model()
     
     def _load_model(self) -> None:
-        """
-        تحميل نموذج Whisper
-        """
+        """تحميل نموذج Whisper"""
         try:
             logger.info(f"Loading Whisper model: {Config.WHISPER_MODEL}")
             self.model = whisper.load_model(Config.WHISPER_MODEL)
@@ -45,9 +41,7 @@ class VideoProcessor:
             raise
     
     async def download_video(self, url: str) -> str:
-        """
-        تحميل الفيديو من يوتيوب واستخراج الصوت
-        """
+        """تحميل الفيديو من يوتيوب"""
         temp_dir = tempfile.mkdtemp(dir=self.temp_dir)
         output_path = os.path.join(temp_dir, 'video.mp4')
         
@@ -103,9 +97,7 @@ class VideoProcessor:
             raise
     
     def extract_audio_text(self, audio_path: str) -> Dict[str, Any]:
-        """
-        استخراج النص من الصوت مع التوقيت
-        """
+        """استخراج النص من الصوت"""
         try:
             logger.info(f"Transcribing audio: {audio_path}")
             result = self.model.transcribe(
@@ -121,9 +113,7 @@ class VideoProcessor:
     
     def find_keywords(self, transcription: Dict[str, Any], 
                      keywords: List[str]) -> List[Dict[str, Any]]:
-        """
-        البحث عن الكلمات المفتاحية في النص
-        """
+        """البحث عن الكلمات المفتاحية"""
         found_segments = []
         segments = transcription.get('segments', [])
         duration = transcription.get('duration', 0)
@@ -169,9 +159,7 @@ class VideoProcessor:
         return merged_segments
     
     def _merge_segments(self, segments: List[Dict]) -> List[Dict]:
-        """
-        دمج المقاطع المتداخلة
-        """
+        """دمج المقاطع المتداخلة"""
         if not segments:
             return []
         
@@ -192,9 +180,7 @@ class VideoProcessor:
         return merged
     
     async def extract_clip(self, audio_path: str, start: float, end: float) -> str:
-        """
-        استخراج مقطع من الصوت
-        """
+        """استخراج مقطع من الصوت"""
         try:
             temp_dir = tempfile.mkdtemp(dir=self.temp_dir)
             output_path = os.path.join(temp_dir, f'clip_{start:.2f}_{end:.2f}.mp3')
@@ -217,9 +203,7 @@ class VideoProcessor:
             raise Exception(f"فشل استخراج المقطع: {e}")
     
     async def process_video(self, url: str, keywords: List[str]) -> Tuple[List[Dict], List[str]]:
-        """
-        معالجة الفيديو بالكامل
-        """
+        """معالجة الفيديو بالكامل"""
         audio_path = None
         temp_dirs = []
         
