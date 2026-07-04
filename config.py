@@ -43,14 +43,10 @@ class Config:
     MAX_CLIPS_PER_USER_DAY = 20
     
     # القائمة السوداء للمستخدمين
-    BLACKLISTED_USERS = []  # يمكن إضافة IDs هنا
-    
-    # القائمة البيضاء (إذا كانت مفعلة)
-    WHITELIST_ENABLED = False
-    WHITELISTED_USERS = []
+    BLACKLISTED_USERS = []
     
     # ============================================
-    # إعدادات المعالجة
+    # 🔧 إعدادات المعالجة (محسنة للخطة المجانية)
     # ============================================
     
     COOKIES_FILE = os.getenv('COOKIES_FILE', 'cookies.txt')
@@ -68,10 +64,11 @@ class Config:
         'صلاة', 'زكاة', 'صوم', 'حج', 'عبادة'
     ]
     
-    MAX_CLIPS = 5
-    PADDING_TIME = 1.0
+    # 🔴 تم التعديل هنا: تقليل الاستهلاك
+    MAX_CLIPS = 3  # من 5 إلى 3
+    PADDING_TIME = 0.7  # من 1.0 إلى 0.7
     MAX_PROCESSING_TIME = 300
-    WHISPER_MODEL = 'base'
+    WHISPER_MODEL = 'tiny'  # من base إلى tiny
     AUDIO_QUALITY = '0'
     
     # ============================================
@@ -133,6 +130,8 @@ def validate_config() -> bool:
     print(f"   - CHANNEL_ID: {Config.CHANNEL_ID}")
     print(f"   - ADMIN_ID: {Config.ADMIN_ID}")
     print(f"   - KEYWORDS: {len(Config.KEYWORDS)} كلمة")
+    print(f"   - WHISPER_MODEL: {Config.WHISPER_MODEL} (موفر للذاكرة)")
+    print(f"   - MAX_CLIPS: {Config.MAX_CLIPS} (مقاطع لكل فيديو)")
     print(f"   - Rate Limit: {'مفعل' if Config.ENABLE_RATE_LIMIT else 'معطل'}")
     print(f"   - Anti-Spam: {'مفعل' if Config.ENABLE_ANTI_SPAM else 'معطل'}")
     print()
