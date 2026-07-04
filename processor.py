@@ -38,13 +38,9 @@ class VideoProcessor:
         """
         try:
             logger.info(f"Loading Whisper model: {Config.WHISPER_MODEL} (tiny for memory saving)")
-            # 🔴 استخدام tiny مع CPU فقط
-            self.model = whisper.load_model(
-                Config.WHISPER_MODEL,
-                device="cpu",
-                download_root=None
-            )
-            logger.info("✅ Whisper model loaded successfully (CPU mode)")
+            # 🔴 التعديل هنا: load_model بدون device
+            self.model = whisper.load_model(Config.WHISPER_MODEL)
+            logger.info("✅ Whisper model loaded successfully")
         except Exception as e:
             logger.error(f"Error loading Whisper model: {e}")
             raise
@@ -113,14 +109,11 @@ class VideoProcessor:
         """
         try:
             logger.info(f"Transcribing audio: {audio_path}")
-            # 🔴 استخدام إعدادات موفرة للذاكرة
+            # 🔴 التعديل هنا: transcribe بدون fp16
             result = self.model.transcribe(
                 audio_path,
                 language='ar',
-                task='transcribe',
-                fp16=False,  # استخدام CPU
-                no_gravity=True,  # تقليل استخدام الذاكرة
-                condition_on_previous_text=False  # تسريع المعالجة
+                task='transcribe'
             )
             logger.info(f"Transcription completed: {len(result['segments'])} segments")
             return result
@@ -136,7 +129,7 @@ class VideoProcessor:
         found_segments = []
         segments = transcription.get('segments', [])
         duration = transcription.get('duration', 0)
-        padding = Config.PADDING_TIME  # 🔴 0.7 ثانية بدلاً من 1.0
+        padding = Config.PADDING_TIME
         
         logger.info(f"Searching for keywords in {len(segments)} segments")
         
@@ -213,7 +206,7 @@ class VideoProcessor:
             (
                 ffmpeg
                 .input(audio_path, ss=start, to=end)
-                .output(output_path, acodec='libmp3lame', ab='128k')  # 🔴 جودة أقل لتوفير المساحة
+                .output(output_path, acodec='libmp3lame', ab='128k')
                 .overwrite_output()
                 .run(quiet=True, capture_stdout=True, capture_stderr=True)
             )
@@ -244,7 +237,6 @@ class VideoProcessor:
                 logger.info("No keywords found in the video")
                 return [], []
             
-            # 🔴 استخدام MAX_CLIPS محدث (3 مقاطع فقط)
             clips = []
             max_clips = min(len(segments), Config.MAX_CLIPS)
             
