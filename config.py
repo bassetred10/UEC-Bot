@@ -2,11 +2,43 @@ import os
 from typing import List
 
 class Config:
+    """
+    فئة تحتوي على جميع إعدادات البوت
+    """
+    
+    # ============================================
+    # إعدادات البوت الأساسية
+    # ============================================
     
     BOT_TOKEN = os.getenv('BOT_TOKEN', 'YOUR_BOT_TOKEN_HERE')
     CHANNEL_ID = int(os.getenv('CHANNEL_ID', '-1004304853750'))
     CHANNEL_USERNAME = os.getenv('CHANNEL_USERNAME', 'uec_u')
     ADMIN_ID = int(os.getenv('ADMIN_ID', '6046274404'))
+    
+    # ============================================
+    # 🔒 إعدادات الأمان والحماية
+    # ============================================
+    
+    ENABLE_RATE_LIMIT = os.getenv('ENABLE_RATE_LIMIT', 'true').lower() == 'true'
+    MAX_REQUESTS_PER_MINUTE = int(os.getenv('MAX_REQUESTS_PER_MINUTE', '30'))  # 🔴 مع S
+    RATE_LIMIT_WINDOW = 60
+    
+    ENABLE_ANTI_SPAM = os.getenv('ENABLE_ANTI_SPAM', 'true').lower() == 'true'
+    MAX_SIMILAR_MESSAGES = 3
+    SPAM_WINDOW = 60
+    
+    ALLOWED_DOMAINS = [
+        'youtube.com', 'youtu.be', 'www.youtube.com',
+        'm.youtube.com', 'youtube-nocookie.com'
+    ]
+    
+    MAX_MESSAGE_LENGTH = 5000
+    MAX_CLIPS_PER_USER_DAY = 20
+    BLACKLISTED_USERS = []
+    
+    # ============================================
+    # 🔧 إعدادات المعالجة
+    # ============================================
     
     COOKIES_FILE = os.getenv('COOKIES_FILE', 'cookies.txt')
     
@@ -29,6 +61,10 @@ class Config:
     WHISPER_MODEL = 'tiny'
     AUDIO_QUALITY = '0'
     
+    # ============================================
+    # إعدادات النظام
+    # ============================================
+    
     DB_PATH = os.getenv('DB_PATH', 'bot_database.db')
     TEMP_DIR = os.getenv('TEMP_DIR', 'temp')
     LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
@@ -39,12 +75,16 @@ class Config:
     
     WELCOME_MESSAGE = (
         "👋 <b>مرحباً بك في بوت بودكاست</b>\n\n"
-        "🎙️ <i>تحويل فيديوهات البودكاست الدينية</i>\n\n"
-        "📤 أرسل رابط الفيديو الآن"
+        "🎙️ <i>تحويل فيديوهات البودكاست الدينية لتسهيل نشرها في مواقع التواصل الاجتماعي</i>\n\n"
+        "📤 أرسل رابط الفيديو الآن وسأقوم بقص أهم الفوائد "
+        "(دعاء، حديث، حكمة) لك!\n\n"
+        "🔍 الكلمات المفتاحية المدعومة:\n"
+        f"{', '.join(KEYWORDS[:10])}..."
     )
 
 
 def validate_config() -> bool:
+    """التحقق من صحة الإعدادات"""
     errors = []
     
     if Config.BOT_TOKEN == 'YOUR_BOT_TOKEN_HERE':
