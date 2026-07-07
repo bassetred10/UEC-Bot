@@ -7,7 +7,8 @@ from typing import List, Tuple, Optional, Dict, Any
 import json
 import shutil
 
-import whisper
+# 🔴 استخدم openai_whisper بدلاً من whisper
+import openai_whisper as whisper
 import ffmpeg
 from pydub import AudioSegment
 
