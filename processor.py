@@ -7,7 +7,6 @@ from typing import List, Tuple, Optional, Dict, Any
 import json
 import shutil
 
-# 🔴 تغيير الاستيراد
 import whisper
 import ffmpeg
 from pydub import AudioSegment
